@@ -31,6 +31,8 @@ Langkah-langkahnya meliputi:
 2. Deteksi dan Penanganan Outlier (Data Error).
 3. Koreksi Pasang Surut dan Transformasi UTM.
 4. Download Hasil.
+
+Disusun oleh: Dharmawan Abdullah,S.T.
 """)
 
 # --- Tahap 1: Upload File ---
@@ -466,4 +468,5 @@ else:
 
 # --- Tombol Kembali ke Awal ---
 if st.session_state.get('final_data') is not None:
+
     st.button("↩️ Kembali ke Awal", on_click=lambda: st.session_state.clear() or st.rerun())
