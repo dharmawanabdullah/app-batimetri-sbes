@@ -41,6 +41,8 @@ Langkah-langkahnya meliputi:
 6. Proses pembersihan, deteksi outlier, dan koreksi pasang surut.
 7. Transformasi koordinat ke UTM.
 8. Download hasil akhir.
+
+Disusun Oleh: Dharmawan Abdullah, S.T. (2025)
 """)
 
 # --- Tahap 1: Inisiasi Awal dan Input Data ---
@@ -612,3 +614,4 @@ else:
 # --- Tombol Kembali ke Awal ---
 if st.session_state.get('final_data') is not None:
     st.button("↩️ Kembali ke Awal", on_click=lambda: st.session_state.clear() or st.rerun())
+
