@@ -89,7 +89,7 @@ else:
 
 
 uploaded_file_pasut = st.file_uploader(
-    "Upload file data pasang surut (pasut.txt) - Kolom Tanggal dan Waktu Terpisah (tanpa header)",
+    "Upload file data pasang surut - Kolom Tanggal dan Waktu Terpisah (tanpa header)",
     type=["txt"],
     key="pasut_file"
 )
@@ -614,4 +614,5 @@ else:
 # --- Tombol Kembali ke Awal ---
 if st.session_state.get('final_data') is not None:
     st.button("↩️ Kembali ke Awal", on_click=lambda: st.session_state.clear() or st.rerun())
+
 
