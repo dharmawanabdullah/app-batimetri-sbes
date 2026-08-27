@@ -418,84 +418,112 @@ if st.session_state.get('final_data') is not None:
     ax.grid(True, linestyle='--', alpha=0.5); ax.axis('equal')
     st.pyplot(fig); plt.clf()
 
-    # Plot Cartopy (DIPERBAIKI)
+    # Plot Cartopy (DIPERBAIKI DENGAN FALLBACK)
     st.subheader("Sebaran Titik Pengukuran dengan Peta (Cartopy)")
     
     # Pastikan data memiliki longitude dan latitude
     if 'longitude' not in final_df.columns or 'latitude' not in final_df.columns:
         st.error("Data tidak memiliki kolom longitude dan latitude untuk plotting Cartopy.")
-        st.info("Jika data input Anda UTM, pastikan Zona UTM yang dimasukkan benar.")
     else:
         try:
             import cartopy.crs as ccrs
             import cartopy.feature as cfeature
             from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
-
-            # Buat figure
-            fig = plt.figure(figsize=(10, 8))
+            
+            # Test apakah Cartopy bisa membuat plot sederhana
+            fig_test = plt.figure()
+            plt.close(fig_test)  # Tutup test figure
+            
+            # Buat figure dengan ukuran yang lebih kecil
+            fig = plt.figure(figsize=(8, 6), dpi=100)
             ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
             
-            # Tambahkan fitur peta
-            ax.add_feature(cfeature.LAND, color='lightgreen')
-            ax.add_feature(cfeature.OCEAN, color='lightblue')
-            ax.add_feature(cfeature.COASTLINE, linewidth=0.5, edgecolor='black')
-            ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5)
-
+            # Tambahkan fitur peta dengan cara yang lebih sederhana
+            ax.stock_img()  # Gunakan stock image dari Cartopy
+            ax.coastlines(resolution='110m', linewidth=0.8)
+            
+            # Dapatkan data koordinat
+            lons = final_df['longitude'].values
+            lats = final_df['latitude'].values
+            depths = -final_df['kedalaman'].values  # Negatif untuk visualisasi
+            
             # Plot titik-titik
             sc = ax.scatter(
-                final_df['longitude'].values,  # Gunakan .values untuk memastikan array
-                final_df['latitude'].values,
-                c=-final_df['kedalaman'].values,  # Negatif untuk warna yang lebih dalam
+                lons, lats,
+                c=depths,
                 cmap='turbo_r', 
-                s=8,
-                transform=ccrs.PlateCarree(), 
-                edgecolors='none'
+                s=10,
+                transform=ccrs.PlateCarree(),
+                edgecolors='none',
+                alpha=0.7
             )
             
-            # Colorbar
-            cbar = plt.colorbar(sc, ax=ax, shrink=0.7)
-            cbar.set_label('Kedalaman (m)', fontsize=12)
-
-            # Hitung dan set extent
-            min_lon = final_df['longitude'].min()
-            max_lon = final_df['longitude'].max()
-            min_lat = final_df['latitude'].min()
-            max_lat = final_df['latitude'].max()
+            # Colorbar yang lebih sederhana
+            cbar = plt.colorbar(sc, ax=ax, shrink=0.6, pad=0.02)
+            cbar.set_label('Kedalaman (m)', fontsize=10)
             
-            # Tambahkan padding
-            lon_range = max_lon - min_lon
-            lat_range = max_lat - min_lat
-            padding_lon = max(0.1, lon_range * 0.1)  # Minimal 0.1 atau 10% dari range
-            padding_lat = max(0.1, lat_range * 0.1)
+            # Set extent dengan buffer yang lebih besar
+            min_lon, max_lon = lons.min(), lons.max()
+            min_lat, max_lat = lats.min(), lats.max()
+            
+            # Tambahkan padding 20%
+            lon_pad = (max_lon - min_lon) * 0.2
+            lat_pad = (max_lat - min_lat) * 0.2
             
             ax.set_extent([
-                min_lon - padding_lon, 
-                max_lon + padding_lon, 
-                min_lat - padding_lat, 
-                max_lat + padding_lat
+                min_lon - lon_pad, max_lon + lon_pad,
+                min_lat - lat_pad, max_lat + lat_pad
             ], crs=ccrs.PlateCarree())
-
-            # Grid dan label
-            gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
-            gl.xformatter = LongitudeFormatter()
-            gl.yformatter = LatitudeFormatter()
-            gl.xlabel_style = {'size': 8}
-            gl.ylabel_style = {'size': 8}
-            gl.top_labels = False
-            gl.right_labels = False
             
-            ax.set_title('Sebaran Titik Pengukuran Batimetri', fontsize=14, weight='bold')
-
-            # Tampilkan
-            st.pyplot(fig)
-            plt.clf()
-            st.success("Plot Cartopy berhasil dibuat.")
+            # Grid sederhana
+            gl = ax.gridlines(draw_labels=False, linestyle='--', alpha=0.3)
             
-        except ImportError:
-            st.warning("Library 'cartopy' belum terinstal. Install dengan: `pip install cartopy`")
+            ax.set_title('Sebaran Titik Pengukuran', fontsize=12, pad=10)
+            
+            # Tight layout untuk menghindari overlap
+            plt.tight_layout()
+            
+            # Tampilkan di Streamlit
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)  # Tutup figure untuk menghemat memori
+            
+            st.success("✅ Plot Cartopy berhasil dibuat.")
+            
+        except ImportError as ie:
+            st.warning("️ Library 'cartopy' tidak tersedia di server ini.")
+            st.info("Plot Cartopy memerlukan instalasi cartopy. Jika Anda menggunakan Streamlit Cloud, tambahkan 'cartopy' di requirements.txt")
+            
+            # Fallback: Tampilkan plot biasa yang lebih detail
+            st.info("Menggunakan plot alternatif...")
+            fig_alt, ax_alt = plt.subplots(figsize=(8, 6))
+            scatter = ax_alt.scatter(
+                final_df['longitude'], 
+                final_df['latitude'], 
+                c=-final_df['kedalaman'],
+                cmap='turbo_r', 
+                s=10,
+                alpha=0.6
+            )
+            plt.colorbar(scatter, label='Kedalaman (m)')
+            ax_alt.set_xlabel('Longitude')
+            ax_alt.set_ylabel('Latitude')
+            ax_alt.set_title('Sebaran Titik Pengukuran Batimetri')
+            ax_alt.grid(True, alpha=0.3)
+            ax_alt.axis('equal')
+            st.pyplot(fig_alt, use_container_width=True)
+            plt.close(fig_alt)
+            
         except Exception as e:
-            st.error(f"Error saat membuat plot Cartopy: {e}")
-            st.info("Pastikan data koordinat (longitude/latitude) valid dan dalam range yang benar.")
+            st.error(f"❌ Error saat membuat plot Cartopy: {type(e).__name__}")
+            st.error(f"Detail: {str(e)}")
+            st.info("💡 Pastikan data koordinat valid (Longitude: -180 sampai 180, Latitude: -90 sampai 90)")
+            
+            # Tampilkan info debug
+            st.write("**Debug Info:**")
+            st.write(f"- Jumlah data: {len(final_df)}")
+            st.write(f"- Longitude range: {final_df['longitude'].min():.4f} sampai {final_df['longitude'].max():.4f}")
+            st.write(f"- Latitude range: {final_df['latitude'].min():.4f} sampai {final_df['latitude'].max():.4f}")
+            st.write(f"- Depth range: {final_df['kedalaman'].min():.2f} sampai {final_df['kedalaman'].max():.2f}")
 
 
 # --- Tahap 4: Download ---
@@ -516,7 +544,7 @@ if st.session_state.get('final_data') is not None:
 
     st.subheader("Pilih file yang ingin Anda unduh:")
     for file_name, file_content in output_files.items():
-        st.download_button(label=f"📥 Download {file_name}", data=file_content, file_name=file_name, mime="text/plain")
+        st.download_button(label=f" Download {file_name}", data=file_content, file_name=file_name, mime="text/plain")
 
     if st.button("🔄 Proses Ulang"):
         st.session_state.clear(); st.rerun()
@@ -526,4 +554,4 @@ else:
         st.session_state.clear(); st.rerun()
 
 if st.session_state.get('final_data') is not None:
-    st.button("️ Kembali ke Awal", on_click=lambda: st.session_state.clear() or st.rerun())
+    st.button("↩️ Kembali ke Awal", on_click=lambda: st.session_state.clear() or st.rerun())
