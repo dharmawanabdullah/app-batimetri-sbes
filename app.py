@@ -224,7 +224,7 @@ if start_processing:
             bati["kedalaman"] = pd.to_numeric(bati["kedalaman"], errors="coerce")
             bati_drop = bati.dropna(subset=["kedalaman", "X_UTM", "Y_UTM", "timestamp"]).reset_index(drop=True)
             
-            # Lakukan inverse transform ke Lat/Lon HANYA untuk keperluan visualisasi Cartopy nanti
+            # Lakukan inverse transform ke Lat/Lon HANYA untuk keperluan visualisasi Cartopy
             zone_str = st.session_state['utm_zone_manual']
             zone_num = int(zone_str[:-1])
             hemisphere = zone_str[-1]
@@ -390,7 +390,7 @@ if all(v is not None for v in [st.session_state['bati_clean'], st.session_state[
                 return df
             bati_koreksi_utm = lonlat_to_utm_per_point(bati_koreksi)
         else:
-            # Data sudah UTM, lewati transformasi, cukup pastikan kolom Zona_UTM ada
+            # Data sudah UTM, lewati transformasi
             bati_koreksi_utm = bati_koreksi.copy()
             bati_koreksi_utm["Zona_UTM"] = st.session_state['utm_zone_manual']
             st.success(f"Data sudah dalam format UTM. Zona UTM ditetapkan sebagai: {st.session_state['utm_zone_manual']}")
@@ -418,44 +418,84 @@ if st.session_state.get('final_data') is not None:
     ax.grid(True, linestyle='--', alpha=0.5); ax.axis('equal')
     st.pyplot(fig); plt.clf()
 
-    # Plot Cartopy
+    # Plot Cartopy (DIPERBAIKI)
     st.subheader("Sebaran Titik Pengukuran dengan Peta (Cartopy)")
-    try:
-        import cartopy.crs as ccrs
-        import cartopy.feature as cfeature
-        from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
+    
+    # Pastikan data memiliki longitude dan latitude
+    if 'longitude' not in final_df.columns or 'latitude' not in final_df.columns:
+        st.error("Data tidak memiliki kolom longitude dan latitude untuk plotting Cartopy.")
+        st.info("Jika data input Anda UTM, pastikan Zona UTM yang dimasukkan benar.")
+    else:
+        try:
+            import cartopy.crs as ccrs
+            import cartopy.feature as cfeature
+            from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
-        ax.add_feature(cfeature.LAND, color='lightgreen')
-        ax.add_feature(cfeature.OCEAN, color='lightblue')
-        ax.add_feature(cfeature.COASTLINE, linewidth=0.5, edgecolor='black')
-        ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5)
+            # Buat figure
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+            
+            # Tambahkan fitur peta
+            ax.add_feature(cfeature.LAND, color='lightgreen')
+            ax.add_feature(cfeature.OCEAN, color='lightblue')
+            ax.add_feature(cfeature.COASTLINE, linewidth=0.5, edgecolor='black')
+            ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5)
 
-        sc = ax.scatter(
-            final_df['longitude'], final_df['latitude'],
-            c=-final_df['kedalaman'], cmap='turbo_r', s=8,
-            transform=ccrs.PlateCarree(), edgecolors='none', linewidth=0.1
-        )
-        cbar = plt.colorbar(sc, ax=ax, shrink=0.7)
-        cbar.set_label('Kedalaman (m)')
+            # Plot titik-titik
+            sc = ax.scatter(
+                final_df['longitude'].values,  # Gunakan .values untuk memastikan array
+                final_df['latitude'].values,
+                c=-final_df['kedalaman'].values,  # Negatif untuk warna yang lebih dalam
+                cmap='turbo_r', 
+                s=8,
+                transform=ccrs.PlateCarree(), 
+                edgecolors='none'
+            )
+            
+            # Colorbar
+            cbar = plt.colorbar(sc, ax=ax, shrink=0.7)
+            cbar.set_label('Kedalaman (m)', fontsize=12)
 
-        min_lon, max_lon = final_df['longitude'].min() - 0.2, final_df['longitude'].max() + 0.2
-        min_lat, max_lat = final_df['latitude'].min() - 0.2, final_df['latitude'].max() + 0.2
-        ax.set_extent([min_lon, max_lon, min_lat, max_lat], crs=ccrs.PlateCarree())
+            # Hitung dan set extent
+            min_lon = final_df['longitude'].min()
+            max_lon = final_df['longitude'].max()
+            min_lat = final_df['latitude'].min()
+            max_lat = final_df['latitude'].max()
+            
+            # Tambahkan padding
+            lon_range = max_lon - min_lon
+            lat_range = max_lat - min_lat
+            padding_lon = max(0.1, lon_range * 0.1)  # Minimal 0.1 atau 10% dari range
+            padding_lat = max(0.1, lat_range * 0.1)
+            
+            ax.set_extent([
+                min_lon - padding_lon, 
+                max_lon + padding_lon, 
+                min_lat - padding_lat, 
+                max_lat + padding_lat
+            ], crs=ccrs.PlateCarree())
 
-        gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
-        gl.xformatter, gl.yformatter = LongitudeFormatter(), LatitudeFormatter()
-        gl.xlabel_style, gl.ylabel_style = {'size': 8}, {'size': 8}
-        gl.top_labels, gl.right_labels = False, False
-        ax.set_title('Sebaran Titik Pengukuran Batimetri', fontsize=14, weight='bold')
+            # Grid dan label
+            gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
+            gl.xformatter = LongitudeFormatter()
+            gl.yformatter = LatitudeFormatter()
+            gl.xlabel_style = {'size': 8}
+            gl.ylabel_style = {'size': 8}
+            gl.top_labels = False
+            gl.right_labels = False
+            
+            ax.set_title('Sebaran Titik Pengukuran Batimetri', fontsize=14, weight='bold')
 
-        st.pyplot(fig); plt.clf()
-        st.success("Plot Cartopy berhasil dibuat.")
-    except ImportError:
-        st.warning("Library 'cartopy' belum terinstal.")
-    except Exception as e:
-        st.error(f"Error plot Cartopy: {e}")
+            # Tampilkan
+            st.pyplot(fig)
+            plt.clf()
+            st.success("Plot Cartopy berhasil dibuat.")
+            
+        except ImportError:
+            st.warning("Library 'cartopy' belum terinstal. Install dengan: `pip install cartopy`")
+        except Exception as e:
+            st.error(f"Error saat membuat plot Cartopy: {e}")
+            st.info("Pastikan data koordinat (longitude/latitude) valid dan dalam range yang benar.")
 
 
 # --- Tahap 4: Download ---
@@ -486,4 +526,4 @@ else:
         st.session_state.clear(); st.rerun()
 
 if st.session_state.get('final_data') is not None:
-    st.button("↩️ Kembali ke Awal", on_click=lambda: st.session_state.clear() or st.rerun())
+    st.button("️ Kembali ke Awal", on_click=lambda: st.session_state.clear() or st.rerun())
