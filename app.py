@@ -300,51 +300,151 @@ if st.session_state.get('datum_pasut') is not None:
 # --- Tahap 2: Deteksi dan Penanganan Outlier ---
 st.header("2. Deteksi dan Penanganan Outlier")
 
+# Inisialisasi session state untuk pengali IQR
+if 'iqr_multiplier' not in st.session_state:
+    st.session_state['iqr_multiplier'] = 1.5
+if 'outlier_checked' not in st.session_state:
+    st.session_state['outlier_checked'] = False
+
 if st.session_state['cleaned_bati_data'] is not None:
     bati_drop = st.session_state['cleaned_bati_data']
 
+    # Plot sebelum deteksi outlier
+    st.subheader("Data Sebelum Penanganan Outlier:")
     fig, ax = plt.subplots()
     ax.plot(bati_drop["timestamp"], bati_drop["kedalaman"], color='black', linewidth=0.8)
-    ax.set_xlabel('Date'); ax.set_ylabel('Depth [m]'); ax.grid(True)
-    st.pyplot(fig); plt.clf()
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Depth [m]')
+    ax.grid(True)
+    st.pyplot(fig)
+    plt.clf()
 
+    # Hitung IQR dan batas
     Q1 = bati_drop['kedalaman'].quantile(0.25)
     Q3 = bati_drop['kedalaman'].quantile(0.75)
     IQR = Q3 - Q1
-    lower_bound = Q1 - 0.5 * IQR
-    upper_bound = Q3 + 0.5 * IQR
+    
+    st.write(f"**Statistik Data:**")
+    st.write(f"- Q1 (Kuartil 1): {Q1:.3f} m")
+    st.write(f"- Q3 (Kuartil 3): {Q3:.3f} m")
+    st.write(f"- IQR: {IQR:.3f} m")
 
+    # Input nilai pengali IQR
+    st.subheader("Pengaturan Nilai Pengali IQR")
+    st.info("Nilai pengali default adalah 1.5. Anda dapat memodifikasinya untuk menyesuaikan jumlah outlier yang terdeteksi.")
+    
+    iqr_multiplier_input = st.number_input(
+        "Masukkan nilai pengali IQR:",
+        min_value=0.1,
+        max_value=10.0,
+        value=st.session_state['iqr_multiplier'],
+        step=0.1,
+        format="%.1f",
+        key="iqr_multiplier_input",
+        help="Nilai pengali untuk menghitung batas outlier. Semakin kecil nilai, semakin banyak outlier yang terdeteksi."
+    )
+
+    # Tombol untuk menerapkan pengali baru
+    col_apply, col_reset = st.columns(2)
+    with col_apply:
+        apply_multiplier = st.button("✅ Terapkan Nilai Pengali", type="primary")
+    with col_reset:
+        reset_multiplier = st.button("🔄 Reset ke Default (1.5)")
+
+    if reset_multiplier:
+        st.session_state['iqr_multiplier'] = 1.5
+        st.session_state['outlier_checked'] = False
+        st.rerun()
+
+    if apply_multiplier:
+        st.session_state['iqr_multiplier'] = iqr_multiplier_input
+        st.session_state['outlier_checked'] = True
+        st.rerun()
+
+    # Hitung outlier dengan pengali saat ini
+    current_multiplier = st.session_state['iqr_multiplier']
+    lower_bound = Q1 - current_multiplier * IQR
+    upper_bound = Q3 + current_multiplier * IQR
+
+    st.write(f"**Batas Outlier saat ini (pengali = {current_multiplier}):**")
+    st.write(f"- Batas Bawah: {lower_bound:.3f} m")
+    st.write(f"- Batas Atas: {upper_bound:.3f} m")
+
+    # Temukan outlier
     outliers = bati_drop[(bati_drop['kedalaman'] < lower_bound) | (bati_drop['kedalaman'] > upper_bound)]
     num_outliers = len(outliers)
-    st.write(f"**Jumlah outlier (IQR):** {num_outliers}")
+    total_data = len(bati_drop)
+    percentage = (num_outliers / total_data) * 100 if total_data > 0 else 0
 
+    st.write(f"**Jumlah outlier yang terdeteksi:** {num_outliers} dari {total_data} data ({percentage:.2f}%)")
+
+    # Tampilkan data outlier jika ditemukan
     if num_outliers > 0:
-        st.write("Contoh data outlier:")
-        st.dataframe(outliers[['timestamp', 'kedalaman']].head(10))
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✅ Ya, hapus outlier", key="remove_outliers_btn_new"):
-                st.session_state['bati_clean'] = bati_drop[(bati_drop['kedalaman'] >= lower_bound) & (bati_drop['kedalaman'] <= upper_bound)].copy()
-                st.session_state['outlier_action'] = 'remove'
-                st.success(f"Outlier dihapus. Sisa: {len(st.session_state['bati_clean'])} baris.")
-        with col2:
-            if st.button("❌ Tidak, pertahankan", key="keep_outliers_btn_new"):
-                st.session_state['bati_clean'] = bati_drop.copy()
-                st.session_state['outlier_action'] = 'keep'
-                st.warning("Outlier dipertahankan.")
-    else:
-        st.session_state['bati_clean'] = bati_drop.copy()
-        st.session_state['outlier_action'] = 'none'
-        st.success("Tidak ada outlier ditemukan.")
+        st.write("Contoh data outlier (10 teratas):")
+        st.dataframe(outliers[['timestamp', 'longitude', 'latitude', 'kedalaman']].head(10))
 
+    # Tahap pengecekan: apakah user ingin memodifikasi atau lanjut
+    if not st.session_state.get('outlier_checked', False):
+        st.subheader("Langkah Selanjutnya")
+        st.info("Silakan periksa jumlah outlier di atas. Jika sudah sesuai, klik 'Lanjut ke Penanganan Outlier'. Jika belum sesuai, ubah nilai pengali IQR dan klik 'Terapkan Nilai Pengali'.")
+        
+        if st.button("➡️ Lanjut ke Penanganan Outlier", type="primary"):
+            st.session_state['outlier_checked'] = True
+            st.rerun()
+    else:
+        # Setelah user puas dengan jumlah outlier, tampilkan pilihan hapus/pertahankan
+        st.subheader("Penanganan Outlier")
+        st.success(f"Nilai pengali IQR ditetapkan: {current_multiplier}. Jumlah outlier terdeteksi: {num_outliers}.")
+
+        if num_outliers > 0:
+            st.write("Apakah Anda ingin menghapus data outlier?")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("✅ Ya, hapus semua data outlier", key="remove_outliers_btn_final"):
+                    bati_clean = bati_drop[(bati_drop['kedalaman'] >= lower_bound) & (bati_drop['kedalaman'] <= upper_bound)].copy()
+                    st.session_state['bati_clean'] = bati_clean
+                    st.session_state['outlier_action'] = 'remove'
+                    st.success(f"Outlier telah dihapus. Jumlah baris sekarang: {len(bati_clean)}")
+
+            with col2:
+                if st.button("❌ Tidak, lanjutkan dengan data outlier", key="keep_outliers_btn_final"):
+                    st.session_state['bati_clean'] = bati_drop.copy()
+                    st.session_state['outlier_action'] = 'keep'
+                    st.warning("Penghapusan outlier dibatalkan. Proses akan dilanjutkan dengan data termasuk outlier.")
+        else:
+            st.info("Tidak ditemukan outlier berdasarkan metode IQR dengan pengali saat ini.")
+            st.session_state['bati_clean'] = bati_drop.copy()
+            st.session_state['outlier_action'] = 'none'
+            st.success("Tidak ada outlier ditemukan. Proses akan dilanjutkan.")
+
+        # Tombol untuk kembali ke pengaturan pengali
+        st.divider()
+        if st.button("🔙 Kembali ke Pengaturan Pengali IQR"):
+            st.session_state['outlier_checked'] = False
+            st.rerun()
+
+# --- Tampilkan hasil penanganan outlier ---
 if st.session_state.get('bati_clean') is not None and st.session_state.get('outlier_action') is not None:
     st.header("Hasil Setelah Penanganan Outlier")
     bati_clean = st.session_state['bati_clean']
+    action = st.session_state['outlier_action']
+
+    st.subheader("Plot Kedalaman Setelah Penanganan Outlier:")
     fig, ax = plt.subplots()
     ax.plot(bati_clean["timestamp"], bati_clean["kedalaman"], color='black', linewidth=0.8)
-    ax.set_xlabel('Date'); ax.set_ylabel('Depth [m]'); ax.grid(True)
-    st.pyplot(fig); plt.clf()
-    st.write(f"Status: Outlier {'dihapus' if st.session_state['outlier_action']=='remove' else 'dipertahankan/tidak ada'}.")
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Depth [m]')
+    ax.grid(True)
+    st.pyplot(fig)
+    plt.clf()
+
+    if action == 'remove':
+        st.write(f"Outlier telah dihapus. Jumlah baris sekarang: {len(bati_clean)}")
+    elif action == 'keep':
+        st.write(f"Data outlier dipertahankan. Jumlah baris: {len(bati_clean)}")
+    elif action == 'none':
+        st.write(f"Tidak ada outlier ditemukan. Jumlah baris: {len(bati_clean)}")
 
 
 # --- Tahap 3: Koreksi Pasut dan Transformasi UTM ---
