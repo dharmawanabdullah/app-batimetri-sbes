@@ -311,8 +311,8 @@ if st.session_state['cleaned_bati_data'] is not None:
     Q1 = bati_drop['kedalaman'].quantile(0.25)
     Q3 = bati_drop['kedalaman'].quantile(0.75)
     IQR = Q3 - Q1
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
+    lower_bound = Q1 - 0.5 * IQR
+    upper_bound = Q3 + 0.5 * IQR
 
     outliers = bati_drop[(bati_drop['kedalaman'] < lower_bound) | (bati_drop['kedalaman'] > upper_bound)]
     num_outliers = len(outliers)
